@@ -1,0 +1,54 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "C:\\skeleton\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{58803E1F-DBC5-4332-87B4-FF90E6E1E2A8}|yolo_cpu.vcxproj|C:\\skeleton\\src\\yolov2_forward_network_quantized.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{58803E1F-DBC5-4332-87B4-FF90E6E1E2A8}|yolo_cpu.vcxproj|solutionrelative:src\\yolov2_forward_network_quantized.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{58803E1F-DBC5-4332-87B4-FF90E6E1E2A8}|yolo_cpu.vcxproj|C:\\skeleton\\src\\yolov2_forward_network.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{58803E1F-DBC5-4332-87B4-FF90E6E1E2A8}|yolo_cpu.vcxproj|solutionrelative:src\\yolov2_forward_network.c||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 0,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "yolov2_forward_network_quantized.c",
+              "DocumentMoniker": "C:\\skeleton\\src\\yolov2_forward_network_quantized.c",
+              "RelativeDocumentMoniker": "src\\yolov2_forward_network_quantized.c",
+              "ToolTip": "C:\\skeleton\\src\\yolov2_forward_network_quantized.c",
+              "RelativeToolTip": "src\\yolov2_forward_network_quantized.c",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAA0AAAAjAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2026-01-26T02:02:16.443Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "yolov2_forward_network.c",
+              "DocumentMoniker": "C:\\skeleton\\src\\yolov2_forward_network.c",
+              "RelativeDocumentMoniker": "src\\yolov2_forward_network.c",
+              "ToolTip": "C:\\skeleton\\src\\yolov2_forward_network.c",
+              "RelativeToolTip": "src\\yolov2_forward_network.c",
+              "ViewState": "AgIAAE0BAAAAAAAAAAAAwCACAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000423|",
+              "WhenOpened": "2026-01-26T02:01:56.681Z",
+              "EditorCaption": ""
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
