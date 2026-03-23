@@ -36,20 +36,20 @@ parameter WGT_DATA_SIZE   = Fx*Fy*Ni*No;	// Layer 00
 parameter WGT_WORD_SIZE   = 32;
 
 
-parameter IFM_FILE_32 		 = "C:/Users/15z980/Desktop/yun/yolohw/sim/inout_data_sw/log_feamap/CONV00_input_32b.hex"; 
-parameter IFM_FILE   		 = "C:/Users/15z980/Desktop/yun/yolohw/sim/inout_data_sw/log_feamap/CONV00_input_16b.hex"; 
-parameter WGT_FILE   		 = "C:/Users/15z980/Desktop/yun/yolohw/sim/inout_data_sw/log_param/CONV00_param_weight.hex"; 
+parameter IFM_FILE_32 		 = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_sw/log_feamap/CONV00_input_32b.hex"; 
+parameter IFM_FILE   		 = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_sw/log_feamap/CONV00_input_16b.hex"; 
+parameter WGT_FILE   		 = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_sw/log_param/CONV00_param_weight.hex"; 
 
 // Output Files
-parameter CONV_INPUT_IMG00   = "C:/Users/15z980/Desktop/yun/yolohw/sim/inout_data_hw/CONV00_input_ch00.bmp"; 
-parameter CONV_INPUT_IMG01   = "C:/Users/15z980/Desktop/yun/yolohw/sim/inout_data_hw/CONV00_input_ch01.bmp"; 
-parameter CONV_INPUT_IMG02   = "C:/Users/15z980/Desktop/yun/yolohw/sim/inout_data_hw/CONV00_input_ch02.bmp"; 
-parameter CONV_INPUT_IMG03   = "C:/Users/15z980/Desktop/yun/yolohw/sim/inout_data_hw/CONV00_input_ch03.bmp"; 
+parameter CONV_INPUT_IMG00   = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_hw/CONV00_input_ch00.bmp"; 
+parameter CONV_INPUT_IMG01   = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_hw/CONV00_input_ch01.bmp"; 
+parameter CONV_INPUT_IMG02   = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_hw/CONV00_input_ch02.bmp"; 
+parameter CONV_INPUT_IMG03   = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_hw/CONV00_input_ch03.bmp"; 
 
-parameter CONV_OUTPUT_IMG00  = "C:/Users/15z980/Desktop/yun/yolohw/sim/inout_data_hw/CONV00_output_ch00.bmp"; 
-parameter CONV_OUTPUT_IMG01  = "C:/Users/15z980/Desktop/yun/yolohw/sim/inout_data_hw/CONV00_output_ch01.bmp"; 
-parameter CONV_OUTPUT_IMG02  = "C:/Users/15z980/Desktop/yun/yolohw/sim/inout_data_hw/CONV00_output_ch02.bmp"; 
-parameter CONV_OUTPUT_IMG03  = "C:/Users/15z980/Desktop/yun/yolohw/sim/inout_data_hw/CONV00_output_ch03.bmp"; 
+parameter CONV_OUTPUT_IMG00  = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_hw/CONV00_output_ch00.bmp"; 
+parameter CONV_OUTPUT_IMG01  = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_hw/CONV00_output_ch01.bmp"; 
+parameter CONV_OUTPUT_IMG02  = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_hw/CONV00_output_ch02.bmp"; 
+parameter CONV_OUTPUT_IMG03  = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_hw/CONV00_output_ch03.bmp"; 
 
 
 // Uncomment to visualize the data from DMA write
