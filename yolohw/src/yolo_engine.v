@@ -524,9 +524,15 @@ always @(posedge clk, negedge rstn) begin
                     to_cnt<=to_cnt+1; ni_cnt<=0; relu_idx<=0;
                     seq_state<=SEQ_CONV_START;
                 end else begin
+                    // ★ MaxPool로 덮어씌워지기 전에 각 레이어 OFM 즉시 저장
+                    case(layer_idx)
+                    2'd0: $writememh("CONV00_hw_ofm.hex", ofm_buf, 0, 16*256*256-1);
+                    2'd1: $writememh("CONV02_hw_ofm.hex", ofm_buf, 0, 32*128*128-1);
+                    2'd2: $writememh("CONV04_hw_ofm.hex", ofm_buf, 0, 64*64*64-1);
+                    endcase
                     to_cnt<=0; pool_row<=0; pool_col<=0; pool_ch<=0;
                     seq_state<=SEQ_MAXPOOL;
-                    $display("[V4] Layer%0d CONV+Bias+ReLU 완료 -> MaxPool", layer_idx);
+                    $display("[V4] Layer%0d CONV+Bias+ReLU 완료 -> MaxPool (hw_ofm.hex 저장됨)", layer_idx);
                 end
             end
         end

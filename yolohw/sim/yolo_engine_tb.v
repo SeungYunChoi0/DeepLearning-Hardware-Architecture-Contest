@@ -337,85 +337,83 @@ u_ofm_conv04_ch1(
 // SW vs HW 비교 검증
 //
 // 비교 대상:
-//   CONV00: SW=CONV00_output.hex (C코드 생성, 16ch*256*256)
-//           HW=u_yolo_engine.ofm_buf[0 ~ 16*256*256-1]
-//   CONV02: SW=CONV02_output.hex (16ch*128*128, MaxPool 전 OFM)
-//           HW=u_yolo_engine.pool_buf[0 ~ 16*128*128-1]  (MaxPool 후)
-//   CONV04: SW=CONV04_output.hex (64ch*64*64, MaxPool 전 OFM)
-//           HW=u_yolo_engine.pool_buf[0 ~ 32*64*64-1]   (MaxPool 후)
+//   SW: CONV0X_output.hex  (C코드 생성, MaxPool 전 OFM, requant된 INT8)
+//   HW: CONV0X_hw_ofm.hex  (yolo_engine.v에서 $writememh로 저장, MaxPool 전 OFM)
 //
-// sim_1에 추가 필요 hex:
+// 두 파일 모두 MaxPool 전 OFM이므로 직접 비교 가능
+// ±1 차이는 정수 시프트 vs 부동소수점 나눗셈 반올림 차이로 허용
+//
+// sim_1에 추가 필요:
 //   CONV00_output.hex / CONV02_output.hex / CONV04_output.hex
 // ============================================================
-integer vfy_fd;
+integer vfy_fd_sw, vfy_fd_hw;
 integer vfy_err;
 integer vfy_total;
 integer vfy_ii;
 reg [7:0] sw_val, hw_val;
 
 initial begin : VERIFY
-    // network_done + dump 완료 대기
+    // network_done 대기 ($writememh는 이미 각 레이어 완료 시점에 저장됨)
     wait(network_done);
-    wait(dump_en == 0);
     #(10*CLK_PERIOD);
 
     // ----------------------------------------------------------
-    // CONV00 출력 검증 (ofm_buf, 16ch x 256x256)
+    // CONV00 검증: SW output.hex vs HW hw_ofm.hex (16ch × 256×256)
     // ----------------------------------------------------------
     vfy_err   = 0;
     vfy_total = 16 * 256 * 256;
-    vfy_fd    = $fopen("CONV00_output.hex", "r");
-    if(vfy_fd == 0) begin
-        $display("[VERIFY] CONV00_output.hex 파일 없음 - 검증 스킵");
+    vfy_fd_sw = $fopen("CONV00_output.hex",  "r");
+    vfy_fd_hw = $fopen("CONV00_hw_ofm.hex",  "r");
+    if(vfy_fd_sw == 0 || vfy_fd_hw == 0) begin
+        $display("[VERIFY] CONV00: 파일 없음 - 검증 스킵");
     end else begin
         for(vfy_ii = 0; vfy_ii < vfy_total; vfy_ii = vfy_ii + 1) begin
-            $fscanf(vfy_fd, "%h\n", sw_val);
-            hw_val = u_yolo_engine.ofm_buf[vfy_ii];
+            $fscanf(vfy_fd_sw, "%h\n", sw_val);
+            $fscanf(vfy_fd_hw, "%h\n", hw_val);
             if(sw_val !== hw_val) vfy_err = vfy_err + 1;
         end
-        $fclose(vfy_fd);
+        $fclose(vfy_fd_sw); $fclose(vfy_fd_hw);
         $display("[VERIFY] CONV00 OFM: total=%0d, errors=%0d -> %s",
                  vfy_total, vfy_err, (vfy_err==0) ? "PASS" : "FAIL");
     end
 
     // ----------------------------------------------------------
-    // CONV02 출력 검증 (pool_buf, 16ch x 128x128)
-    // C코드 CONV02_output.hex는 MaxPool 전 OFM (requant된 값)
-    // HW pool_buf는 MaxPool 후 값 → 비교 기준이 다를 수 있음
-    // 여기서는 pool_buf (MaxPool 후) 기준으로 비교
+    // CONV02 검증: SW output.hex vs HW hw_ofm.hex (32ch × 128×128)
     // ----------------------------------------------------------
     vfy_err   = 0;
-    vfy_total = 16 * 128 * 128;
-    vfy_fd    = $fopen("CONV02_output.hex", "r");
-    if(vfy_fd == 0) begin
-        $display("[VERIFY] CONV02_output.hex 파일 없음 - 검증 스킵");
+    vfy_total = 32 * 128 * 128;
+    vfy_fd_sw = $fopen("CONV02_output.hex",  "r");
+    vfy_fd_hw = $fopen("CONV02_hw_ofm.hex",  "r");
+    if(vfy_fd_sw == 0 || vfy_fd_hw == 0) begin
+        $display("[VERIFY] CONV02: 파일 없음 - 검증 스킵");
     end else begin
         for(vfy_ii = 0; vfy_ii < vfy_total; vfy_ii = vfy_ii + 1) begin
-            $fscanf(vfy_fd, "%h\n", sw_val);
-            hw_val = u_yolo_engine.pool_buf[vfy_ii];
+            $fscanf(vfy_fd_sw, "%h\n", sw_val);
+            $fscanf(vfy_fd_hw, "%h\n", hw_val);
             if(sw_val !== hw_val) vfy_err = vfy_err + 1;
         end
-        $fclose(vfy_fd);
-        $display("[VERIFY] CONV02 Pool: total=%0d, errors=%0d -> %s",
+        $fclose(vfy_fd_sw); $fclose(vfy_fd_hw);
+        $display("[VERIFY] CONV02 OFM: total=%0d, errors=%0d -> %s",
                  vfy_total, vfy_err, (vfy_err==0) ? "PASS" : "FAIL");
     end
 
     // ----------------------------------------------------------
-    // CONV04 출력 검증 (pool_buf, 32ch x 64x64)
+    // CONV04 검증: SW output.hex vs HW hw_ofm.hex (64ch × 64×64)
     // ----------------------------------------------------------
     vfy_err   = 0;
-    vfy_total = 32 * 64 * 64;
-    vfy_fd    = $fopen("CONV04_output.hex", "r");
-    if(vfy_fd == 0) begin
-        $display("[VERIFY] CONV04_output.hex 파일 없음 - 검증 스킵");
+    vfy_total = 64 * 64 * 64;
+    vfy_fd_sw = $fopen("CONV04_output.hex",  "r");
+    vfy_fd_hw = $fopen("CONV04_hw_ofm.hex",  "r");
+    if(vfy_fd_sw == 0 || vfy_fd_hw == 0) begin
+        $display("[VERIFY] CONV04: 파일 없음 - 검증 스킵");
     end else begin
         for(vfy_ii = 0; vfy_ii < vfy_total; vfy_ii = vfy_ii + 1) begin
-            $fscanf(vfy_fd, "%h\n", sw_val);
-            hw_val = u_yolo_engine.pool_buf[vfy_ii];
+            $fscanf(vfy_fd_sw, "%h\n", sw_val);
+            $fscanf(vfy_fd_hw, "%h\n", hw_val);
             if(sw_val !== hw_val) vfy_err = vfy_err + 1;
         end
-        $fclose(vfy_fd);
-        $display("[VERIFY] CONV04 Pool: total=%0d, errors=%0d -> %s",
+        $fclose(vfy_fd_sw); $fclose(vfy_fd_hw);
+        $display("[VERIFY] CONV04 OFM: total=%0d, errors=%0d -> %s",
                  vfy_total, vfy_err, (vfy_err==0) ? "PASS" : "FAIL");
     end
 
