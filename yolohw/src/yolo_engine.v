@@ -136,7 +136,7 @@ endfunction
 // C 생성 hex는 32비트 한 줄에 int8 weight 4개 packed 형식이므로,
 // packed 메모리에 읽은 뒤 8비트 unpacked 메모리로 풀어서 사용한다.
 //------------------------------------------------------------
-reg [31:0] w0_pack [0:107];    // 432 / 4 = 108
+reg [31:0] w0_pack [0:111];    // 16 × ceil(27/4) = 16 × 7 = 112
 reg [31:0] w1_pack [0:1151];   // 4608 / 4 = 1152
 reg [31:0] w2_pack [0:4607];   // 18432 / 4 = 4608
 
@@ -239,7 +239,6 @@ wire [15:0] max_req_blk_idx         = (256*256)/16;
 //------------------------------------------------------------
 integer ii;
 initial begin : LOAD_HEX
-    reg [31:0] tmp [0:65535];
 
     // packed weights load
     $readmemh("CONV00_param_weight.hex", w0_pack);
@@ -247,7 +246,7 @@ initial begin : LOAD_HEX
     $readmemh("CONV04_param_weight.hex", w2_pack);
 
     // unpack: [31:24]=i+3 [23:16]=i+2 [15:8]=i+1 [7:0]=i+0
-    for(ii=0; ii<108; ii=ii+1) begin
+    for(ii=0; ii<112; ii=ii+1) begin
         w0[ii*4+0] = w0_pack[ii][ 7: 0];
         w0[ii*4+1] = w0_pack[ii][15: 8];
         w0[ii*4+2] = w0_pack[ii][23:16];
@@ -270,13 +269,8 @@ initial begin : LOAD_HEX
     $readmemh("CONV02_param_biases.hex", b1);
     $readmemh("CONV04_param_biases.hex", b2);
 
-    // IFM: 32비트 [7:0]=R [15:8]=G [23:16]=B → planar 변환
-    $readmemh("CONV00_input.hex", tmp);
-    for(ii=0; ii<65536; ii=ii+1) begin
-        ifm_buf[0*65536+ii] = tmp[ii][ 7: 0]; // R
-        ifm_buf[1*65536+ii] = tmp[ii][15: 8]; // G
-        ifm_buf[2*65536+ii] = tmp[ii][23:16]; // B
-    end
+    // IFM: CONV00_input.hex = 1줄 1바이트(8비트), planar [CH][H*W] 순서로 직접 로드
+    $readmemh("CONV00_input.hex", ifm_buf, 0, 196607);
 
     $display("[V4] 로드 완료 - packed weight unpack / bias / IFM");
     $display("[V4] IFM[0] R=%0d G=%0d B=%0d",
@@ -384,38 +378,38 @@ always @(*) begin
         for(k=0;k<TO;k=k+1) begin
             if((to_cnt*TO+k)<cur_no) begin
                 case(layer_idx)
-                2'd0: begin
-                    mac_win[k][ 7:0]=w0[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+0 ];
-                    mac_win[k][15:8]=w0[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+1 ];
-                    mac_win[k][23:16]=w0[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+2 ];
-                    mac_win[k][31:24]=w0[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+3 ];
-                    mac_win[k][39:32]=w0[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+4 ];
-                    mac_win[k][47:40]=w0[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+5 ];
-                    mac_win[k][55:48]=w0[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+6 ];
-                    mac_win[k][63:56]=w0[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+7 ];
-                    mac_win[k][71:64]=w0[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+8 ];
+                2'd0: begin  // filter_size=27 (9×Ni=3)
+                    mac_win[k][ 7:0]=w0[(to_cnt*TO+k)*27+ni_cnt*9+0];
+                    mac_win[k][15:8]=w0[(to_cnt*TO+k)*27+ni_cnt*9+1];
+                    mac_win[k][23:16]=w0[(to_cnt*TO+k)*27+ni_cnt*9+2];
+                    mac_win[k][31:24]=w0[(to_cnt*TO+k)*27+ni_cnt*9+3];
+                    mac_win[k][39:32]=w0[(to_cnt*TO+k)*27+ni_cnt*9+4];
+                    mac_win[k][47:40]=w0[(to_cnt*TO+k)*27+ni_cnt*9+5];
+                    mac_win[k][55:48]=w0[(to_cnt*TO+k)*27+ni_cnt*9+6];
+                    mac_win[k][63:56]=w0[(to_cnt*TO+k)*27+ni_cnt*9+7];
+                    mac_win[k][71:64]=w0[(to_cnt*TO+k)*27+ni_cnt*9+8];
                 end
-                2'd1: begin
-                    mac_win[k][ 7:0]=w1[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+0 ];
-                    mac_win[k][15:8]=w1[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+1 ];
-                    mac_win[k][23:16]=w1[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+2 ];
-                    mac_win[k][31:24]=w1[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+3 ];
-                    mac_win[k][39:32]=w1[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+4 ];
-                    mac_win[k][47:40]=w1[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+5 ];
-                    mac_win[k][55:48]=w1[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+6 ];
-                    mac_win[k][63:56]=w1[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+7 ];
-                    mac_win[k][71:64]=w1[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+8 ];
+                2'd1: begin  // filter_size=144 (9×Ni=16)
+                    mac_win[k][ 7:0]=w1[(to_cnt*TO+k)*144+ni_cnt*9+0];
+                    mac_win[k][15:8]=w1[(to_cnt*TO+k)*144+ni_cnt*9+1];
+                    mac_win[k][23:16]=w1[(to_cnt*TO+k)*144+ni_cnt*9+2];
+                    mac_win[k][31:24]=w1[(to_cnt*TO+k)*144+ni_cnt*9+3];
+                    mac_win[k][39:32]=w1[(to_cnt*TO+k)*144+ni_cnt*9+4];
+                    mac_win[k][47:40]=w1[(to_cnt*TO+k)*144+ni_cnt*9+5];
+                    mac_win[k][55:48]=w1[(to_cnt*TO+k)*144+ni_cnt*9+6];
+                    mac_win[k][63:56]=w1[(to_cnt*TO+k)*144+ni_cnt*9+7];
+                    mac_win[k][71:64]=w1[(to_cnt*TO+k)*144+ni_cnt*9+8];
                 end
-                default: begin
-                    mac_win[k][ 7:0]=w2[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+0 ];
-                    mac_win[k][15:8]=w2[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+1 ];
-                    mac_win[k][23:16]=w2[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+2 ];
-                    mac_win[k][31:24]=w2[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+3 ];
-                    mac_win[k][39:32]=w2[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+4 ];
-                    mac_win[k][47:40]=w2[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+5 ];
-                    mac_win[k][55:48]=w2[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+6 ];
-                    mac_win[k][63:56]=w2[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+7 ];
-                    mac_win[k][71:64]=w2[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+8 ];
+                default: begin  // filter_size=288 (9×Ni=32)
+                    mac_win[k][ 7:0]=w2[(to_cnt*TO+k)*288+ni_cnt*9+0];
+                    mac_win[k][15:8]=w2[(to_cnt*TO+k)*288+ni_cnt*9+1];
+                    mac_win[k][23:16]=w2[(to_cnt*TO+k)*288+ni_cnt*9+2];
+                    mac_win[k][31:24]=w2[(to_cnt*TO+k)*288+ni_cnt*9+3];
+                    mac_win[k][39:32]=w2[(to_cnt*TO+k)*288+ni_cnt*9+4];
+                    mac_win[k][47:40]=w2[(to_cnt*TO+k)*288+ni_cnt*9+5];
+                    mac_win[k][55:48]=w2[(to_cnt*TO+k)*288+ni_cnt*9+6];
+                    mac_win[k][63:56]=w2[(to_cnt*TO+k)*288+ni_cnt*9+7];
+                    mac_win[k][71:64]=w2[(to_cnt*TO+k)*288+ni_cnt*9+8];
                 end
                 endcase
             end
