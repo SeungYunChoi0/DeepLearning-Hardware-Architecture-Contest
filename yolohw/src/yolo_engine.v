@@ -9,7 +9,7 @@
 //   CONV04: in_m=32,  w_m=256, next_m=16 → shift>>9,  bias_mult=8192
 //
 // sim_1에 Add Sources로 추가할 hex 파일:
-//   CONV00_input_32b.hex
+//   CONV00_input.hex
 //   CONV00/02/04_param_weight.hex
 //   CONV00/02/04_param_biases.hex
 //
@@ -271,7 +271,7 @@ initial begin : LOAD_HEX
     $readmemh("CONV04_param_biases.hex", b2);
 
     // IFM: 32비트 [7:0]=R [15:8]=G [23:16]=B → planar 변환
-    $readmemh("CONV00_input_32b.hex", tmp);
+    $readmemh("CONV00_input.hex", tmp);
     for(ii=0; ii<65536; ii=ii+1) begin
         ifm_buf[0*65536+ii] = tmp[ii][ 7: 0]; // R
         ifm_buf[1*65536+ii] = tmp[ii][15: 8]; // G
@@ -519,6 +519,11 @@ always @(posedge clk, negedge rstn) begin
                     to_cnt<=to_cnt+1; ni_cnt<=0; relu_idx<=0;
                     seq_state<=SEQ_CONV_START;
                 end else begin
+                    case(layer_idx)
+                    2'd0: $writememh("CONV00_hw_ofm.hex", ofm_buf, 0, 16*256*256-1);
+                    2'd1: $writememh("CONV02_hw_ofm.hex", ofm_buf, 0, 32*128*128-1);
+                    default: $writememh("CONV04_hw_ofm.hex", ofm_buf, 0, 64*64*64-1);
+                    endcase
                     to_cnt<=0; pool_row<=0; pool_col<=0; pool_ch<=0;
                     seq_state<=SEQ_MAXPOOL;
                     $display("[V4] Layer%0d CONV+Bias+ReLU 완료 → MaxPool", layer_idx);
