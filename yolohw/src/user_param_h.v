@@ -1,46 +1,68 @@
 // -------------------------------------------------------------
-// For debuging 
+// user_param_h.v
+// yolo_engine.v / yolo_engine_tb.v (V4) 대응
+// CONV00 -> MaxPool -> CONV02 -> MaxPool -> CONV04 -> MaxPool
+//
+// IMPORTANT:
+//   sim_1 Add Sources에 아래 hex 파일을 추가할 것:
+//     CONV00_input.hex
+//     CONV00_param_weight.hex / CONV02_param_weight.hex / CONV04_param_weight.hex
+//     CONV00_param_biases.hex / CONV02_param_biases.hex / CONV04_param_biases.hex
+//
+//   bmp 출력 폴더가 없으면 미리 생성:
+//     yolohw/sim/inout_data_hw/
 // -------------------------------------------------------------
-// IMPORTANT NOTE**: 
-//      1. Correct the directories with your path
-//      2. Use directories without blank space
-//{{{
-// Input Files
+
+// -------------------------------------------------------------
+// IFM 기본 크기 (CONV00 입력 기준)
+// -------------------------------------------------------------
 parameter IFM_WIDTH         = 256;
 parameter IFM_HEIGHT        = 256;
 parameter IFM_CHANNEL       = 3;
-parameter IFM_DATA_SIZE     = IFM_HEIGHT*IFM_WIDTH*2;    // Layer 00
-parameter IFM_WORD_SIZE     = 32/2;
-parameter IFM_DATA_SIZE_32  = IFM_HEIGHT*IFM_WIDTH;		 // Layer 00
-parameter IFM_WORD_SIZE_32  = 32;
-parameter Fx = 3, Fy = 3;
-parameter Ni = 3, No = 16; 
-parameter WGT_DATA_SIZE     = Fx*Fy*Ni*No;	             // Layer 00
-parameter WGT_WORD_SIZE     = 32;
 
+// -------------------------------------------------------------
+// TB sram 모델용 IFM 파일 (더미 - yolo_engine.v에서 직접 로드)
+// IFM_FILE_16b -> IFM_FILE 로 통일 (CONV00_input.hex 사용)
+// -------------------------------------------------------------
+parameter IFM_FILE          = "CONV00_input.hex";
 
-parameter IFM_FILE_32 		 = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_sw/log_feamap/CONV00_input_32b.hex"; 
-parameter IFM_FILE   		 = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_sw/log_feamap/CONV00_input_16b.hex"; 
-parameter WGT_FILE   		 = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_sw/log_param/CONV00_param_weight.hex"; 
-
-// Output Files
-parameter CONV_INPUT_IMG00   = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_hw/CONV00_input_ch00.bmp"; 
-parameter CONV_INPUT_IMG01   = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_hw/CONV00_input_ch01.bmp"; 
-parameter CONV_INPUT_IMG02   = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_hw/CONV00_input_ch02.bmp"; 
-parameter CONV_INPUT_IMG03   = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_hw/CONV00_input_ch03.bmp"; 
-
-parameter CONV_OUTPUT_IMG00  = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_hw/CONV00_output_ch00.bmp"; 
-parameter CONV_OUTPUT_IMG01  = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_hw/CONV00_output_ch01.bmp"; 
-parameter CONV_OUTPUT_IMG02  = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_hw/CONV00_output_ch02.bmp"; 
-parameter CONV_OUTPUT_IMG03  = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_hw/CONV00_output_ch03.bmp"; 
-
-// SRAM Size
-parameter DW            = 32;	  // data bit-width per word
-parameter AW            = 16;	  // address bit-width
-parameter DEPTH         = 65536;   // depth, word length
-parameter N_DELAY       = 1;       // delay for spram read operation
+// -------------------------------------------------------------
+// SRAM / Buffer 크기
+// -------------------------------------------------------------
+parameter DW            = 32;
+parameter AW            = 16;
+parameter DEPTH         = 65536;
+parameter N_DELAY       = 1;
 
 parameter BUFF_WIDTH    = 32;
 parameter BUFF_DEPTH    = 4096;
-parameter BUFF_ADDR_W   = $clog2(BUFF_DEPTH);
-//}}}
+parameter BUFF_ADDR_W   = $clog2(BUFF_DEPTH);  // = 12
+
+// -------------------------------------------------------------
+// 입력 이미지 bmp (디버그용 - CHECK_DMA_WRITE define 시 사용)
+// -------------------------------------------------------------
+parameter CONV_INPUT_IMG00 = "./CONV00_input_ch00.bmp";
+parameter CONV_INPUT_IMG01 = "./CONV00_input_ch01.bmp";
+parameter CONV_INPUT_IMG02 = "./CONV00_input_ch02.bmp";
+parameter CONV_INPUT_IMG03 = "./CONV00_input_ch03.bmp";
+
+// -------------------------------------------------------------
+// 출력 bmp 파일 경로
+//
+// IMG00~03 : CONV00 출력 (ofm_buf, 256x256, ch0~3)
+// IMG04~05 : CONV02 MaxPool 후 (pool_buf, 128x128, ch0~1)
+// IMG06~07 : CONV04 MaxPool 후 (pool_buf,  64x64,  ch0~1)
+// -------------------------------------------------------------
+// CONV00 출력 (256x256)
+parameter CONV_OUTPUT_IMG00 = "./CONV00_output_ch00.bmp";
+parameter CONV_OUTPUT_IMG01 = "./CONV00_output_ch01.bmp";
+parameter CONV_OUTPUT_IMG02 = "./CONV00_output_ch02.bmp";
+parameter CONV_OUTPUT_IMG03 = "./CONV00_output_ch03.bmp";
+
+// CONV02 MaxPool 후 (128x128)
+parameter CONV_OUTPUT_IMG04 = "./CONV02_pool_ch00.bmp";
+parameter CONV_OUTPUT_IMG05 = "./CONV02_pool_ch01.bmp";
+
+// CONV04 MaxPool 후 (64x64)
+parameter CONV_OUTPUT_IMG06 = "./CONV04_pool_ch00.bmp";
+parameter CONV_OUTPUT_IMG07 = "./CONV04_pool_ch01.bmp";
