@@ -1,22 +1,17 @@
 //----------------------------------------------------------------+
-// yolo_engine.v (V4 - 수정본)
+// yolo_engine_v4.v
 // 완전한 파이프라인:
-//   IFM -> CONV(MAC누산) -> +Bias -> ReLU -> >>shift -> MaxPool
-//
-// [수정사항]
-//   1. ifm_buf 크기: 262144 (16x128x128 커버)
-//   2. 가중치 로드: TI=4 패킹 언패킹 + CONV00_input.hex 직접 로드
-//   3. MaxPool: 지연 레지스터 제거 -> 1클럭 지역변수 방식
+//   IFM → CONV(MAC누산) → +Bias → ReLU → >>shift → MaxPool
 //
 // V2 C코드 기준 레이어별 파라미터:
-//   CONV00: in_m=128, w_m=32,  next_m=32 -> shift>>7,  bias_mult=4096
-//   CONV02: in_m=32,  w_m=256, next_m=32 -> shift>>8,  bias_mult=8192
-//   CONV04: in_m=32,  w_m=256, next_m=16 -> shift>>9,  bias_mult=8192
+//   CONV00: in_m=128, w_m=32,  next_m=32 → shift>>7,  bias_mult=4096
+//   CONV02: in_m=32,  w_m=256, next_m=32 → shift>>8,  bias_mult=8192
+//   CONV04: in_m=32,  w_m=256, next_m=16 → shift>>9,  bias_mult=8192
 //
 // sim_1에 Add Sources로 추가할 hex 파일:
-//   CONV00_input.hex
-//   CONV00/02/04_param_weight.hex  (TI=4 packed 32bit)
-//   CONV00/02/04_param_biases.hex  (16bit signed)
+//   CONV00_input_32b.hex
+//   CONV00/02/04_param_weight.hex
+//   CONV00/02/04_param_biases.hex
 //
 // 하드웨어: TO=12, DSP=192개(80%), mac×12
 //----------------------------------------------------------------+
@@ -120,36 +115,49 @@ function [6:0] f_no;
     input [1:0] i;
     case(i) 2'd0:f_no=16; 2'd1:f_no=32; default:f_no=64; endcase
 endfunction
-// descale shift: (in_m * w_m) / next_in_m = 128*32/32=128(>>7), 32*256/32=256(>>8), 32*256/16=512(>>9)
+// descale+requant shift: CONV00>>7, CONV02>>8, CONV04>>9
 function [3:0] f_shift;
     input [1:0] i;
     case(i) 2'd0:f_shift=7; 2'd1:f_shift=8; default:f_shift=9; endcase
 endfunction
 
-//------------------------------------------------------------
-// [수정1] 가중치 버퍼 - 8비트 개별 배열 (언패킹 후)
-//   CONV00: filter_size=27, No=16  -> 27*16  = 432
-//   CONV02: filter_size=144, No=32 -> 144*32 = 4608
-//   CONV04: filter_size=288, No=64 -> 288*64 = 18432
-//------------------------------------------------------------
-reg [7:0] w0 [0:431  ];
-reg [7:0] w1 [0:4607 ];
-reg [7:0] w2 [0:18431];
+function [7:0] f_max4;
+    input [7:0] a, b, c, d;
+    reg [7:0] ab, cd;
+    begin
+        ab = (a >= b) ? a : b;
+        cd = (c >= d) ? c : d;
+        f_max4 = (ab >= cd) ? ab : cd;
+    end
+endfunction
 
 //------------------------------------------------------------
-// 바이어스 버퍼 (16비트 부호있는, C코드 %04x 출력)
+// 가중치 버퍼
+// C 생성 hex는 32비트 한 줄에 int8 weight 4개 packed 형식이므로,
+// packed 메모리에 읽은 뒤 8비트 unpacked 메모리로 풀어서 사용한다.
 //------------------------------------------------------------
-reg signed [15:0] b0 [0:15];
-reg signed [15:0] b1 [0:31];
-reg signed [15:0] b2 [0:63];
+reg [31:0] w0_pack [0:107];    // 432 / 4 = 108
+reg [31:0] w1_pack [0:1151];   // 4608 / 4 = 1152
+reg [31:0] w2_pack [0:4607];   // 18432 / 4 = 4608
+
+reg [7:0]  w0 [0:431  ];       // CONV00: 3×3×3×16=432
+reg [7:0]  w1 [0:4607 ];       // CONV02: 3×3×16×32=4608
+reg [7:0]  w2 [0:18431];       // CONV04: 3×3×32×64=18432
 
 //------------------------------------------------------------
-// IFM / OFM / Pool 버퍼 (8비트, planar: ch*W*H)
-// [수정2] ifm_buf: 262144 (16*128*128) 커버
+// 바이어스 버퍼 (16비트 부호있는)
+// bias_quant = bias_float × (in_m × w_m)
 //------------------------------------------------------------
-reg [7:0] ifm_buf  [0:262143 ];   // 최대 16*128*128
-reg [7:0] ofm_buf  [0:1048575];   // 최대 16*256*256
-reg [7:0] pool_buf [0:262143 ];   // 최대 16*128*128
+reg signed [15:0] b0 [0:15];   // CONV00: No=16
+reg signed [15:0] b1 [0:31];   // CONV02: No=32
+reg signed [15:0] b2 [0:63];   // CONV04: No=64
+
+//------------------------------------------------------------
+// IFM / OFM / Pool 버퍼 (8비트, planar: ch×W×H)
+//------------------------------------------------------------
+reg [7:0] ifm_buf  [0:262143 ];   // 최대 128×128×16 (= CONV02 입력)
+reg [7:0] ofm_buf  [0:1048575];   // 최대 256×256×16
+reg [7:0] pool_buf [0:262143 ];   // 최대 128×128×16
 
 //------------------------------------------------------------
 // 누산기 (32비트)
@@ -203,7 +211,7 @@ reg [11:0] pool_row, pool_col;
 reg [6:0]  pool_ch;
 reg [31:0] copy_idx, copy_total;
 reg [3:0]  drain_cnt;
-// RELU 계산용 임시 변수
+// RELU 계산용 임시 변수 (모듈 레벨)
 reg signed [31:0] acc_bias;
 reg [7:0]         relu_out_r;
 
@@ -217,8 +225,6 @@ reg  [31:0] dram_base_addr_rd, dram_base_addr_wr, reserved_register;
 
 wire ctrl_read, read_done;
 wire [AXI_WIDTH_AD-1:0] read_addr;
-wire [AXI_WIDTH_DA-1:0] read_data;
-wire                     read_data_vld;
 wire [BIT_TRANS-1:0]    read_data_cnt;
 wire ctrl_write_done, ctrl_write, write_done, indata_req_wr;
 wire [BIT_TRANS-1:0]    write_data_cnt;
@@ -228,63 +234,57 @@ wire [BIT_TRANS-1:0] num_trans      = 16;
 wire [15:0] max_req_blk_idx         = (256*256)/16;
 
 //------------------------------------------------------------
-// [수정2] 초기화 - 가중치 언패킹 + IFM 직접 로드
-//
-// C코드 save_quantized_model 출력 포맷:
-//   TI=4 패킹: [31:24]=w[i+3] [23:16]=w[i+2] [15:8]=w[i+1] [7:0]=w[i+0]
-//   CONV00: 16필터 * ceil(27/4)=7 = 112 words
-//   CONV02: 32필터 * ceil(144/4)=36 = 1152 words
-//   CONV04: 64필터 * ceil(288/4)=72 = 4608 words
-//
-// C코드 save_input_hex 출력 포맷:
-//   CONV00_input.hex: planar [CH][H*W] 순서, 8비트/줄
+// 초기화 (시뮬레이션용)
+// hex 파일 → sim_1에 Add Sources → 파일명만 사용
 //------------------------------------------------------------
 integer ii;
 initial begin : LOAD_HEX
-    // 임시 패킹 버퍼 (파일 포맷과 1:1 대응)
-    reg [31:0] w0_p [0:111 ];   // 16 * 7  = 112  words
-    reg [31:0] w1_p [0:1151];   // 32 * 36 = 1152 words
-    reg [31:0] w2_p [0:4607];   // 64 * 72 = 4608 words
+    reg [31:0] tmp [0:65535];
 
-    $readmemh("CONV00_param_weight.hex", w0_p);
-    $readmemh("CONV02_param_weight.hex", w1_p);
-    $readmemh("CONV04_param_weight.hex", w2_p);
+    // packed weights load
+    $readmemh("CONV00_param_weight.hex", w0_pack);
+    $readmemh("CONV02_param_weight.hex", w1_pack);
+    $readmemh("CONV04_param_weight.hex", w2_pack);
 
-    // 언패킹: [7:0]=w[4i+0], [15:8]=w[4i+1], [23:16]=w[4i+2], [31:24]=w[4i+3]
-    for(ii=0; ii<112; ii=ii+1) begin
-        if(4*ii+0 < 432) w0[4*ii+0] = w0_p[ii][ 7: 0];
-        if(4*ii+1 < 432) w0[4*ii+1] = w0_p[ii][15: 8];
-        if(4*ii+2 < 432) w0[4*ii+2] = w0_p[ii][23:16];
-        if(4*ii+3 < 432) w0[4*ii+3] = w0_p[ii][31:24];
+    // unpack: [31:24]=i+3 [23:16]=i+2 [15:8]=i+1 [7:0]=i+0
+    for(ii=0; ii<108; ii=ii+1) begin
+        w0[ii*4+0] = w0_pack[ii][ 7: 0];
+        w0[ii*4+1] = w0_pack[ii][15: 8];
+        w0[ii*4+2] = w0_pack[ii][23:16];
+        w0[ii*4+3] = w0_pack[ii][31:24];
     end
     for(ii=0; ii<1152; ii=ii+1) begin
-        w1[4*ii+0] = w1_p[ii][ 7: 0];
-        w1[4*ii+1] = w1_p[ii][15: 8];
-        w1[4*ii+2] = w1_p[ii][23:16];
-        w1[4*ii+3] = w1_p[ii][31:24];
+        w1[ii*4+0] = w1_pack[ii][ 7: 0];
+        w1[ii*4+1] = w1_pack[ii][15: 8];
+        w1[ii*4+2] = w1_pack[ii][23:16];
+        w1[ii*4+3] = w1_pack[ii][31:24];
     end
     for(ii=0; ii<4608; ii=ii+1) begin
-        w2[4*ii+0] = w2_p[ii][ 7: 0];
-        w2[4*ii+1] = w2_p[ii][15: 8];
-        w2[4*ii+2] = w2_p[ii][23:16];
-        w2[4*ii+3] = w2_p[ii][31:24];
+        w2[ii*4+0] = w2_pack[ii][ 7: 0];
+        w2[ii*4+1] = w2_pack[ii][15: 8];
+        w2[ii*4+2] = w2_pack[ii][23:16];
+        w2[ii*4+3] = w2_pack[ii][31:24];
     end
 
-    // IFM 직접 로드 (planar INT8, C코드 save_input_hex 출력)
-    $readmemh("CONV00_input.hex", ifm_buf, 0, 196607);
-
-    // 바이어스 로드 (16비트 signed)
     $readmemh("CONV00_param_biases.hex", b0);
     $readmemh("CONV02_param_biases.hex", b1);
     $readmemh("CONV04_param_biases.hex", b2);
 
-    $display("[V4] 로드 완료");
+    // IFM: 32비트 [7:0]=R [15:8]=G [23:16]=B → planar 변환
+    $readmemh("CONV00_input_32b.hex", tmp);
+    for(ii=0; ii<65536; ii=ii+1) begin
+        ifm_buf[0*65536+ii] = tmp[ii][ 7: 0]; // R
+        ifm_buf[1*65536+ii] = tmp[ii][15: 8]; // G
+        ifm_buf[2*65536+ii] = tmp[ii][23:16]; // B
+    end
+
+    $display("[V4] 로드 완료 - packed weight unpack / bias / IFM");
     $display("[V4] IFM[0] R=%0d G=%0d B=%0d",
-             $signed(ifm_buf[0]), $signed(ifm_buf[65536]), $signed(ifm_buf[131072]));
+             ifm_buf[0], ifm_buf[65536], ifm_buf[131072]);
+    $display("[V4] w0[0..3]=%0d %0d %0d %0d",
+             $signed(w0[0]), $signed(w0[1]), $signed(w0[2]), $signed(w0[3]));
     $display("[V4] bias0[0]=%0d bias0[1]=%0d",
              $signed(b0[0]), $signed(b0[1]));
-    $display("[V4] w0[0]=%0d w0[1]=%0d w0[26]=%0d",
-             $signed(w0[0]), $signed(w0[1]), $signed(w0[26]));
 end
 
 //------------------------------------------------------------
@@ -342,7 +342,7 @@ cnn_ctrl u_cnn_ctrl(
 );
 
 //------------------------------------------------------------
-// MAC x TO=12
+// MAC × TO=12
 //------------------------------------------------------------
 mac u_mac_00(.clk(clk),.rstn(rstn),.vld_i(mac_vld_i),.win(mac_win[ 0]),.din(mac_din),.acc_o(mac_acc_o[ 0]),.vld_o(mac_vld_o[ 0]));
 mac u_mac_01(.clk(clk),.rstn(rstn),.vld_i(mac_vld_i),.win(mac_win[ 1]),.din(mac_din),.acc_o(mac_acc_o[ 1]),.vld_o(mac_vld_o[ 1]));
@@ -372,54 +372,50 @@ always @(*) begin
     for(k=0;k<TO;k=k+1) mac_win[k]=128'd0;
     if(ctrl_data_run && seq_state==SEQ_CONV) begin
         mac_vld_i=1;
-        // 3x3 neighborhood packing (zero-padding at border)
         mac_din[ 7: 0]=(is_fr||is_fc)?8'd0:ifm_buf[choff+(ctrl_row-1)*cur_width+(ctrl_col-1)];
         mac_din[15: 8]=(is_fr       )?8'd0:ifm_buf[choff+(ctrl_row-1)*cur_width+ ctrl_col   ];
         mac_din[23:16]=(is_fr||is_lc)?8'd0:ifm_buf[choff+(ctrl_row-1)*cur_width+(ctrl_col+1)];
-        mac_din[31:24]=(       is_fc)?8'd0:ifm_buf[choff+ ctrl_row   *cur_width+(ctrl_col-1)];
-        mac_din[39:32]=               ifm_buf[choff+ ctrl_row   *cur_width+ ctrl_col         ];
-        mac_din[47:40]=(       is_lc)?8'd0:ifm_buf[choff+ ctrl_row   *cur_width+(ctrl_col+1)];
+        mac_din[31:24]=(        is_fc)?8'd0:ifm_buf[choff+ ctrl_row   *cur_width+(ctrl_col-1)];
+        mac_din[39:32]=                    ifm_buf[choff+ ctrl_row   *cur_width+ ctrl_col   ];
+        mac_din[47:40]=(        is_lc)?8'd0:ifm_buf[choff+ ctrl_row   *cur_width+(ctrl_col+1)];
         mac_din[55:48]=(is_lr||is_fc)?8'd0:ifm_buf[choff+(ctrl_row+1)*cur_width+(ctrl_col-1)];
         mac_din[63:56]=(is_lr       )?8'd0:ifm_buf[choff+(ctrl_row+1)*cur_width+ ctrl_col   ];
         mac_din[71:64]=(is_lr||is_lc)?8'd0:ifm_buf[choff+(ctrl_row+1)*cur_width+(ctrl_col+1)];
-
-        // [수정1] 가중치 인덱스: f*filter_size + ni*9 + [0:8]
-        // filter_size: CONV00=27, CONV02=144, CONV04=288
         for(k=0;k<TO;k=k+1) begin
             if((to_cnt*TO+k)<cur_no) begin
                 case(layer_idx)
-                2'd0: begin  // filter_size=27 (=9*3)
-                    mac_win[k][ 7: 0] = w0[(to_cnt*TO+k)*27+ni_cnt*9+0];
-                    mac_win[k][15: 8] = w0[(to_cnt*TO+k)*27+ni_cnt*9+1];
-                    mac_win[k][23:16] = w0[(to_cnt*TO+k)*27+ni_cnt*9+2];
-                    mac_win[k][31:24] = w0[(to_cnt*TO+k)*27+ni_cnt*9+3];
-                    mac_win[k][39:32] = w0[(to_cnt*TO+k)*27+ni_cnt*9+4];
-                    mac_win[k][47:40] = w0[(to_cnt*TO+k)*27+ni_cnt*9+5];
-                    mac_win[k][55:48] = w0[(to_cnt*TO+k)*27+ni_cnt*9+6];
-                    mac_win[k][63:56] = w0[(to_cnt*TO+k)*27+ni_cnt*9+7];
-                    mac_win[k][71:64] = w0[(to_cnt*TO+k)*27+ni_cnt*9+8];
+                2'd0: begin
+                    mac_win[k][ 7:0]=w0[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+0 ];
+                    mac_win[k][15:8]=w0[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+1 ];
+                    mac_win[k][23:16]=w0[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+2 ];
+                    mac_win[k][31:24]=w0[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+3 ];
+                    mac_win[k][39:32]=w0[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+4 ];
+                    mac_win[k][47:40]=w0[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+5 ];
+                    mac_win[k][55:48]=w0[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+6 ];
+                    mac_win[k][63:56]=w0[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+7 ];
+                    mac_win[k][71:64]=w0[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+8 ];
                 end
-                2'd1: begin  // filter_size=144 (=9*16)
-                    mac_win[k][ 7: 0] = w1[(to_cnt*TO+k)*144+ni_cnt*9+0];
-                    mac_win[k][15: 8] = w1[(to_cnt*TO+k)*144+ni_cnt*9+1];
-                    mac_win[k][23:16] = w1[(to_cnt*TO+k)*144+ni_cnt*9+2];
-                    mac_win[k][31:24] = w1[(to_cnt*TO+k)*144+ni_cnt*9+3];
-                    mac_win[k][39:32] = w1[(to_cnt*TO+k)*144+ni_cnt*9+4];
-                    mac_win[k][47:40] = w1[(to_cnt*TO+k)*144+ni_cnt*9+5];
-                    mac_win[k][55:48] = w1[(to_cnt*TO+k)*144+ni_cnt*9+6];
-                    mac_win[k][63:56] = w1[(to_cnt*TO+k)*144+ni_cnt*9+7];
-                    mac_win[k][71:64] = w1[(to_cnt*TO+k)*144+ni_cnt*9+8];
+                2'd1: begin
+                    mac_win[k][ 7:0]=w1[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+0 ];
+                    mac_win[k][15:8]=w1[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+1 ];
+                    mac_win[k][23:16]=w1[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+2 ];
+                    mac_win[k][31:24]=w1[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+3 ];
+                    mac_win[k][39:32]=w1[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+4 ];
+                    mac_win[k][47:40]=w1[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+5 ];
+                    mac_win[k][55:48]=w1[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+6 ];
+                    mac_win[k][63:56]=w1[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+7 ];
+                    mac_win[k][71:64]=w1[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+8 ];
                 end
-                default: begin  // filter_size=288 (=9*32)
-                    mac_win[k][ 7: 0] = w2[(to_cnt*TO+k)*288+ni_cnt*9+0];
-                    mac_win[k][15: 8] = w2[(to_cnt*TO+k)*288+ni_cnt*9+1];
-                    mac_win[k][23:16] = w2[(to_cnt*TO+k)*288+ni_cnt*9+2];
-                    mac_win[k][31:24] = w2[(to_cnt*TO+k)*288+ni_cnt*9+3];
-                    mac_win[k][39:32] = w2[(to_cnt*TO+k)*288+ni_cnt*9+4];
-                    mac_win[k][47:40] = w2[(to_cnt*TO+k)*288+ni_cnt*9+5];
-                    mac_win[k][55:48] = w2[(to_cnt*TO+k)*288+ni_cnt*9+6];
-                    mac_win[k][63:56] = w2[(to_cnt*TO+k)*288+ni_cnt*9+7];
-                    mac_win[k][71:64] = w2[(to_cnt*TO+k)*288+ni_cnt*9+8];
+                default: begin
+                    mac_win[k][ 7:0]=w2[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+0 ];
+                    mac_win[k][15:8]=w2[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+1 ];
+                    mac_win[k][23:16]=w2[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+2 ];
+                    mac_win[k][31:24]=w2[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+3 ];
+                    mac_win[k][39:32]=w2[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+4 ];
+                    mac_win[k][47:40]=w2[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+5 ];
+                    mac_win[k][55:48]=w2[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+6 ];
+                    mac_win[k][63:56]=w2[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+7 ];
+                    mac_win[k][71:64]=w2[((to_cnt*TO+k)*9*cur_ni)+ni_cnt*9+8 ];
                 end
                 endcase
             end
@@ -485,7 +481,6 @@ always @(posedge clk, negedge rstn) begin
         end
 
         SEQ_DRAIN: begin
-            // MAC 파이프라인 비우기 (MAC_LATENCY=9 클럭)
             if(drain_cnt<MAC_LATENCY-1) drain_cnt<=drain_cnt+1;
             else begin
                 drain_cnt<=0;
@@ -497,7 +492,7 @@ always @(posedge clk, negedge rstn) begin
             end
         end
 
-        // ① acc + bias  ② ReLU  ③ >>shift  ④ 클리핑[0,127]  ⑤ ofm_buf 저장
+        // ① acc + bias ② ReLU ③ >>shift ④ 클리핑[0,127] ⑤ ofm_buf 저장
         SEQ_RELU: begin
             if(relu_idx<cur_width*cur_height) begin
                 for(k=0;k<TO;k=k+1) begin
@@ -508,14 +503,14 @@ always @(posedge clk, negedge rstn) begin
                         2'd1: acc_bias = accum[k][relu_idx] + b1[to_cnt*TO+k];
                         default: acc_bias = accum[k][relu_idx] + b2[to_cnt*TO+k];
                         endcase
-                        // ② ReLU + ③ >>shift + ④ 클리핑
+                        // ② ReLU, ③ >>shift, ④ 클리핑
                         if(acc_bias>0)
                             relu_out_r = (acc_bias>>cur_shift)>127 ? 8'd127
                                         : (acc_bias>>cur_shift);
                         else
                             relu_out_r = 8'd0;
                         // ⑤ 저장
-                        ofm_buf[(to_cnt*TO+k)*cur_width*cur_height+relu_idx] <= relu_out_r;
+                        ofm_buf[(to_cnt*TO+k)*cur_width*cur_height+relu_idx]<=relu_out_r;
                     end
                 end
                 relu_idx<=relu_idx+1;
@@ -524,47 +519,35 @@ always @(posedge clk, negedge rstn) begin
                     to_cnt<=to_cnt+1; ni_cnt<=0; relu_idx<=0;
                     seq_state<=SEQ_CONV_START;
                 end else begin
-                    // ★ MaxPool로 덮어씌워지기 전에 각 레이어 OFM 즉시 저장
-                    case(layer_idx)
-                    2'd0: $writememh("CONV00_hw_ofm.hex", ofm_buf, 0, 16*256*256-1);
-                    2'd1: $writememh("CONV02_hw_ofm.hex", ofm_buf, 0, 32*128*128-1);
-                    2'd2: $writememh("CONV04_hw_ofm.hex", ofm_buf, 0, 64*64*64-1);
-                    endcase
                     to_cnt<=0; pool_row<=0; pool_col<=0; pool_ch<=0;
                     seq_state<=SEQ_MAXPOOL;
-                    $display("[V4] Layer%0d CONV+Bias+ReLU 완료 -> MaxPool (hw_ofm.hex 저장됨)", layer_idx);
+                    $display("[V4] Layer%0d CONV+Bias+ReLU 완료 → MaxPool", layer_idx);
                 end
             end
         end
 
-        // [수정3] MaxPool: 지역변수(reg) 방식으로 1클럭에 처리
-        // ofm_buf는 reg 배열이므로 조합 읽기 가능
         SEQ_MAXPOOL: begin
-            begin : mp_blk
-                reg [7:0] v00, v01, v10, v11, vmax;
-                v00 = ofm_buf[pool_ch*cur_width*cur_height +  pool_row   *cur_width + pool_col  ];
-                v01 = ofm_buf[pool_ch*cur_width*cur_height +  pool_row   *cur_width + pool_col+1];
-                v10 = ofm_buf[pool_ch*cur_width*cur_height + (pool_row+1)*cur_width + pool_col  ];
-                v11 = ofm_buf[pool_ch*cur_width*cur_height + (pool_row+1)*cur_width + pool_col+1];
-                vmax = (v00>=v01)?((v00>=v10)?((v00>=v11)?v00:v11):((v10>=v11)?v10:v11)):
-                                  ((v01>=v10)?((v01>=v11)?v01:v11):((v10>=v11)?v10:v11));
-                pool_buf[pool_ch*(cur_width/2)*(cur_height/2)
-                         +(pool_row/2)*(cur_width/2)+(pool_col/2)] <= vmax;
-            end
-            // 카운터: 채널 우선 → 열 → 행 순서 (stride=2)
-            if(pool_ch < cur_no-1) pool_ch <= pool_ch+1;
+            pool_buf[pool_ch*(cur_width/2)*(cur_height/2)
+                     +(pool_row/2)*(cur_width/2)+(pool_col/2)]
+                <= f_max4(
+                    ofm_buf[pool_ch*cur_width*cur_height+ pool_row   *cur_width+pool_col  ],
+                    ofm_buf[pool_ch*cur_width*cur_height+ pool_row   *cur_width+pool_col+1],
+                    ofm_buf[pool_ch*cur_width*cur_height+(pool_row+1)*cur_width+pool_col  ],
+                    ofm_buf[pool_ch*cur_width*cur_height+(pool_row+1)*cur_width+pool_col+1]
+                );
+            if(pool_ch<cur_no-1) pool_ch<=pool_ch+1;
             else begin
-                pool_ch <= 0;
-                if(pool_col+2 < cur_width) pool_col <= pool_col+2;
+                pool_ch<=0;
+                if(pool_col+2<cur_width) pool_col<=pool_col+2;
                 else begin
-                    pool_col <= 0;
-                    if(pool_row+2 < cur_height) pool_row <= pool_row+2;
+                    pool_col<=0;
+                    if(pool_row+2<cur_height) pool_row<=pool_row+2;
                     else begin
                         pool_row<=0; pool_col<=0; pool_ch<=0;
                         copy_idx<=0;
                         copy_total<=(cur_width/2)*(cur_height/2)*cur_no;
                         seq_state<=SEQ_COPY;
-                        $display("[V4] Layer%0d MaxPool 완료", layer_idx);
+                        $display("[V4] Layer%0d MaxPool 완료",layer_idx);
                     end
                 end
             end
@@ -585,7 +568,7 @@ always @(posedge clk, negedge rstn) begin
                 cur_ni<=f_ni(layer_idx+1); cur_no<=f_no(layer_idx+1);
                 cur_shift<=f_shift(layer_idx+1);
                 seq_state<=SEQ_CONV_START;
-                $display("[V4] Layer%0d 시작", layer_idx+1);
+                $display("[V4] Layer%0d 시작",layer_idx+1);
             end else begin
                 seq_state<=SEQ_DONE;
                 $display("[V4] 완료: CONV00->Pool->CONV02->Pool->CONV04->Pool");
@@ -597,6 +580,10 @@ always @(posedge clk, negedge rstn) begin
         endcase
     end
 end
+
+//------------------------------------------------------------
+// MaxPool은 SEQ_MAXPOOL 상태에서 현재 좌표 기준으로 즉시 pool_buf에 저장
+//------------------------------------------------------------
 
 //------------------------------------------------------------
 // AXI DMA (원본 유지)
