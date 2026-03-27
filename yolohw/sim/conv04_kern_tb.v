@@ -15,6 +15,7 @@ parameter CONV_OUTPUT_HEX00 = {OUT_PATH_HEX, "/CONV04_hw_out_ch00.hex"};
 parameter CONV_OUTPUT_HEX01 = {OUT_PATH_HEX, "/CONV04_hw_out_ch01.hex"};
 parameter CONV_OUTPUT_HEX02 = {OUT_PATH_HEX, "/CONV04_hw_out_ch02.hex"};
 parameter CONV_OUTPUT_HEX03 = {OUT_PATH_HEX, "/CONV04_hw_out_ch03.hex"};
+parameter BIAS_FILE = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_sw/log_param/CONV04_param_biases.hex";
 
 reg clk;
 reg rstn;
@@ -43,7 +44,10 @@ wire        vld_o [0:TO-1];
 
 // 문법 에러 방지를 위한 임시 변수들
 reg [127:0] tmp_win_val;
-reg [31:0]  temp_psum;
+reg signed [31:0]  temp_psum;
+
+// bias 버퍼 (No=64채널, INT16 signed)
+reg signed [15:0] bias [0:63];
 
 // 파일 핸들러
 integer fp_h0, fp_h1, fp_h2, fp_h3;
@@ -70,6 +74,11 @@ initial begin: PROC_Load
     for(i = 0; i < WGT_DATA_SIZE; i=i+1) filter[i] = 0;
     $display("Loading CONV04 weights...");
     $readmemh(WGT_FILE, filter);
+
+    // bias 로드 (CONV04: No=64채널, INT16 signed)
+    for(i = 0; i < 64; i=i+1) bias[i] = 0;
+    $display("Loading CONV04 biases...");
+    $readmemh(BIAS_FILE, bias);
 end
 
 //--------------------------------------------------------------------
@@ -139,8 +148,11 @@ initial begin: PROC_Main
             end 
 
             // ReLU 및 역양자화 (>> 9)
+            // bias 추가: accum + bias[출력채널] → ReLU → >>9 → clip
+            // bias[j]: j번 MAC이 처리하는 출력채널 index
             for(j=0; j<TO; j=j+1) begin
-                temp_psum = accum_reg[j];
+                // bias는 INT16 signed → 32비트 부호 확장 후 합산
+                temp_psum = accum_reg[j] + {{16{bias[j][15]}}, bias[j]};
                 if($signed(temp_psum) > 0) begin
                     if(temp_psum[31:17] != 0) 
                         conv_out_reg[j] = 8'hFF;
