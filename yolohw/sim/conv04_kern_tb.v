@@ -120,6 +120,7 @@ initial begin
             for(j=0; j<TO; j=j+1) begin
                 if(accum_reg[j] > 0)
                     conv_out_reg[j] = (accum_reg[j][24:9] > 255) ? 8'hFF : accum_reg[j][16:9] ;
+
                 else
                     conv_out_reg[j] = 8'd0;
             end
