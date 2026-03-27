@@ -1,12 +1,20 @@
 `timescale 1ns / 1ns
 
 module conv_kern_tb;
-// define 파일 경로가 src 폴더 내에 있다면 "../src/define_CONV04.v"로 수정이 필요할 수 있습니다.
+// 설정 파일 로드
 `include "define_CONV04.v" 
 
+// 시뮬레이션 파라미터 [cite: 2-3]
 parameter CLK_PERIOD = 10; 
 parameter TO          = 12; 
 parameter MAC_LATENCY = 9;
+
+// HEX 파일 출력 경로 설정 (사용자 지정 절대 경로) 
+parameter OUT_PATH_HEX = "C:/Users/15Z980/Desktop/yun/DeepLearning-Hardware-Architecture-Contest";
+parameter CONV_OUTPUT_HEX00 = {OUT_PATH_HEX, "/CONV04_hw_out_ch00.hex"};
+parameter CONV_OUTPUT_HEX01 = {OUT_PATH_HEX, "/CONV04_hw_out_ch01.hex"};
+parameter CONV_OUTPUT_HEX02 = {OUT_PATH_HEX, "/CONV04_hw_out_ch02.hex"};
+parameter CONV_OUTPUT_HEX03 = {OUT_PATH_HEX, "/CONV04_hw_out_ch03.hex"};
 
 reg clk;
 reg rstn;
@@ -17,7 +25,7 @@ initial begin
 end
 
 //--------------------------------------------------------------------
-// 신호 및 메모리 선언
+// 신호 및 메모리 선언 [cite: 5-11]
 //--------------------------------------------------------------------
 reg [7:0]              in_img_all [0:IFM_HEIGHT*IFM_WIDTH*Ni-1];
 reg [IFM_WORD_SIZE_32-1:0] in_img [0:IFM_DATA_SIZE_32-1];
@@ -33,16 +41,25 @@ reg [127:0] din;
 wire [19:0] acc_o [0:TO-1];
 wire        vld_o [0:TO-1];
 
-// 비트 추출을 위한 임시 변수 추가
+// 비트 추출을 위한 임시 변수 (Syntax Error 방지) 
 reg [31:0] temp_psum;
+
+// 파일 핸들러 선언
+integer fp_h0, fp_h1, fp_h2, fp_h3;
 
 integer i, j, ni_ch;
 integer row, col;
 
 //--------------------------------------------------------------------
-// 데이터 로드
+// 데이터 로드 및 파일 열기 [cite: 12-14]
 //--------------------------------------------------------------------
 initial begin: PROC_Load
+    // HEX 출력 파일 열기
+    fp_h0 = $fopen(CONV_OUTPUT_HEX00, "w");
+    fp_h1 = $fopen(CONV_OUTPUT_HEX01, "w");
+    fp_h2 = $fopen(CONV_OUTPUT_HEX02, "w");
+    fp_h3 = $fopen(CONV_OUTPUT_HEX03, "w");
+
     for(i = 0; i < IFM_HEIGHT*IFM_WIDTH*Ni; i=i+1) in_img_all[i] = 0;
     $display("Loading CONV04 ALL channels...");
     $readmemh(IFM_FILE_ALL, in_img_all);
@@ -56,7 +73,7 @@ initial begin: PROC_Load
 end
 
 //--------------------------------------------------------------------
-// 메인 시뮬레이션 루프
+// 메인 시뮬레이션 루프 [cite: 15-46]
 //--------------------------------------------------------------------
 initial begin
     rstn        = 1'b0;
@@ -84,7 +101,7 @@ initial begin
             for(ni_ch=0; ni_ch<Ni; ni_ch=ni_ch+1) begin
                 @(posedge clk) begin
                     vld_i = 1'b1;
-                    // Input Packing
+                    // 데이터 입력 (3x3 Window) [cite: 30-37]
                     din[ 7: 0] = ((row==0)||(col==0))              ? 8'd0 : in_img_all[ni_ch*IFM_HEIGHT*IFM_WIDTH+(row-1)*IFM_WIDTH+(col-1)];
                     din[15: 8] =  (row==0)                          ? 8'd0 : in_img_all[ni_ch*IFM_HEIGHT*IFM_WIDTH+(row-1)*IFM_WIDTH+ col   ];
                     din[23:16] = ((row==0)||(col==IFM_WIDTH-1))     ? 8'd0 : in_img_all[ni_ch*IFM_HEIGHT*IFM_WIDTH+(row-1)*IFM_WIDTH+(col+1)];
@@ -96,7 +113,7 @@ initial begin
                     din[71:64] = ((row==IFM_HEIGHT-1)||(col==IFM_WIDTH-1))? 8'd0 : in_img_all[ni_ch*IFM_HEIGHT*IFM_WIDTH+(row+1)*IFM_WIDTH+(col+1)];
                     din[127:72] = 56'd0;
 
-                    for(j=0; j<TO; j=j+1) begin
+                    for(j=0; j<TO; j=j+1) begin [cite: 38-40]
                         win[j][ 7: 0] = filter[(j*Fx*Fy*Ni)+ni_ch*9+0][7:0];
                         win[j][15: 8] = filter[(j*Fx*Fy*Ni)+ni_ch*9+1][7:0];
                         win[j][23:16] = filter[(j*Fx*Fy*Ni)+ni_ch*9+2][7:0];
@@ -115,29 +132,38 @@ initial begin
                     accum_reg[j] = accum_reg[j] + $signed(acc_o[j]);
             end 
 
-            // 역양자화 및 ReLU (임시 변수 사용으로 Syntax Error 해결)
+            // ReLU 및 역양자화 (>> 9) [cite: 108-112]
             for(j=0; j<TO; j=j+1) begin
                 temp_psum = accum_reg[j];
                 if($signed(temp_psum) > 0) begin
                     if(temp_psum[31:17] != 0) 
-                        conv_out_reg[j] = 8'hFF;
+                        conv_out_reg[j] = 8'hFF; // Clipping
                     else
                         conv_out_reg[j] = temp_psum[16:9]; // >> 9
                 end else
-                    conv_out_reg[j] = 8'd0;
+                    conv_out_reg[j] = 8'd0; // ReLU
             end
 
-            @(posedge clk) out_vld_reg = 1'b1;
+            // HEX 파일 기록 및 유효 신호 출력 [cite: 45-46]
+            @(posedge clk) begin
+                out_vld_reg = 1'b1;
+                $fwrite(fp_h0, "%02x\n", conv_out_reg[0]);
+                $fwrite(fp_h1, "%02x\n", conv_out_reg[1]);
+                $fwrite(fp_h2, "%02x\n", conv_out_reg[2]);
+                $fwrite(fp_h3, "%02x\n", conv_out_reg[3]);
+            end
             @(posedge clk) out_vld_reg = 1'b0;
         end
     end
 
     $display("[V2] CONV04 Simulation Done!");
+    // 파일 닫기 
+    $fclose(fp_h0); $fclose(fp_h1); $fclose(fp_h2); $fclose(fp_h3);
     #(100*CLK_PERIOD) @(posedge clk) $stop;
 end
 
 //--------------------------------------------------------------------
-// 인스턴스
+// 하드웨어 모듈 인스턴스 [cite: 47-50]
 //--------------------------------------------------------------------
 generate
     genvar m;
@@ -150,7 +176,7 @@ generate
     genvar b;
     for(b=0; b<4; b=b+1) begin: BMP_OUT_GEN
         bmp_image_writer #(.OUTFILE( (b==0)?CONV_OUTPUT_IMG00:(b==1)?CONV_OUTPUT_IMG01:(b==2)?CONV_OUTPUT_IMG02:CONV_OUTPUT_IMG03 ),
-                          .WIDTH(64),.HEIGHT(64)) 
+                          .WIDTH(IFM_WIDTH),.HEIGHT(IFM_HEIGHT)) 
         u_out(.clk(clk),.rstn(rstn),.din(conv_out_reg[b]),.vld(out_vld_reg),.frame_done());
     end
 endgenerate
