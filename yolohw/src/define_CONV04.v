@@ -1,52 +1,45 @@
 // =============================================================
-// LAYER 선택 가이드 (수정 완료: CONV04)
-//   CONV00: Ni=3,  No=16, W=256, H=256
-//   CONV02: Ni=16, No=32, W=128, H=128
-//   CONV04: Ni=32, No=64, W=64,  H=64 
+// CONV04 전용 설정 파일 (최종 경로 및 규격 반영)
 // =============================================================
 
-// 현재 레이어: CONV04 설정
-parameter IFM_WIDTH        = 64;  // [cite: 167-168]
-parameter IFM_HEIGHT       = 64;  // [cite: 169]
-parameter IFM_CHANNEL      = 32;  // Ni와 동일
+// 1. 이미지 및 채널 규격 [cite: 167-169, 172]
+parameter IFM_WIDTH        = 64;  
+parameter IFM_HEIGHT       = 64;  
+parameter Ni               = 32; 
+parameter No               = 64; 
+parameter Fx               = 3;
+parameter Fy               = 3;
 
-parameter IFM_DATA_SIZE    = IFM_HEIGHT*IFM_WIDTH*2;
-parameter IFM_WORD_SIZE    = 32/2;
-parameter IFM_DATA_SIZE_32 = IFM_HEIGHT*IFM_WIDTH;
+// 2. 데이터 사이즈 계산 
+// _input.hex용 (전체 8비트 데이터 개수: 64*64*32)
+parameter IFM_DATA_SIZE    = IFM_HEIGHT * IFM_WIDTH * Ni; 
 
-// 채널0만 (bmp 시각화용)
+// _input_32b.hex용 (4채널당 1줄 패킹: 64*64*8)
+// CONV04는 Ni=32이므로 한 픽셀당 8줄(32/4)이 들어있습니다. [cite: 140-142]
+parameter IFM_DATA_SIZE_32 = IFM_HEIGHT * IFM_WIDTH * (Ni/4); 
+
 parameter IFM_WORD_SIZE_32 = 32;
-parameter Fx = 3, Fy = 3;
-
-// CONV04 채널 설정: 입력(Ni)=32, 출력(No)=64 
-parameter Ni = 32; 
-parameter No = 64; 
-parameter WGT_DATA_SIZE    = Fx*Fy*Ni*No; // 3*3*32*64 
+parameter WGT_DATA_SIZE    = Fx * Fy * Ni * No;
 parameter WGT_WORD_SIZE    = 32;
 
-// [V2] 전체 Ni채널 입력 hex 파일 (CONV04용으로 변경) [cite: 173-175]
-parameter IFM_FILE_ALL = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_sw/log_feamap/CONV04_input.hex";
-parameter IFM_FILE_32  = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_sw/log_feamap/CONV04_input_32b.hex";
-parameter IFM_FILE     = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_sw/log_feamap/CONV04_input_16b.hex";
-parameter WGT_FILE     = "C:/Users/15Z980/Desktop/yun/yolohw/sim/log_param/CONV04_param_weight.hex";
+// 3. 파일 경로 (사용자가 옮겨둔 새 경로로 통일) 
+parameter HEX_PATH     = "C:/Users/15Z980/Desktop/yun/DeepLearning-Hardware-Architecture-Contest/hex";
 
-// 입력 이미지 디버그 bmp 경로 (CONV04) [cite: 175-176]
-parameter CONV_INPUT_IMG00  = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_hw/CONV04_input_ch00.bmp";
-parameter CONV_INPUT_IMG01  = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_hw/CONV04_input_ch01.bmp";
-parameter CONV_INPUT_IMG02  = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_hw/CONV04_input_ch02.bmp";
-parameter CONV_INPUT_IMG03  = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_hw/CONV04_input_ch03.bmp";
+parameter IFM_FILE_ALL = {HEX_PATH, "/CONV04_input.hex"};
+parameter IFM_FILE_32  = {HEX_PATH, "/CONV04_input_32b.hex"};
+parameter IFM_FILE     = {HEX_PATH, "/CONV04_input_16b.hex"};
+parameter WGT_FILE     = {HEX_PATH, "/CONV04_param_weight.hex"};
 
-// 출력 결과 bmp 경로 (CONV04) [cite: 176-178]
-parameter CONV_OUTPUT_IMG00 = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_hw/CONV04_output_ch00.bmp";
-parameter CONV_OUTPUT_IMG01 = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_hw/CONV04_output_ch01.bmp";
-parameter CONV_OUTPUT_IMG02 = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_hw/CONV04_output_ch02.bmp";
-parameter CONV_OUTPUT_IMG03 = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_hw/CONV04_output_ch03.bmp";
-// ... (필요에 따라 IMG11까지 확장 가능)
+// 4. 출력 이미지 저장 경로 (기존 경로 유지) [cite: 175-178]
+parameter OUT_PATH     = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_hw";
 
+parameter CONV_OUTPUT_IMG00 = {OUT_PATH, "/CONV04_output_ch00.bmp"};
+parameter CONV_OUTPUT_IMG01 = {OUT_PATH, "/CONV04_output_ch01.bmp"};
+parameter CONV_OUTPUT_IMG02 = {OUT_PATH, "/CONV04_output_ch02.bmp"};
+parameter CONV_OUTPUT_IMG03 = {OUT_PATH, "/CONV04_output_ch03.bmp"};
+
+// 기타 하드웨어 파라미터 [cite: 179-182]
 parameter DW         = 32;
 parameter AW         = 16;
 parameter DEPTH      = 65536;
-parameter N_DELAY    = 1;
-parameter BUFF_WIDTH = 32;
 parameter BUFF_DEPTH = 4096;
-parameter BUFF_ADDR_W = $clog2(BUFF_DEPTH);
