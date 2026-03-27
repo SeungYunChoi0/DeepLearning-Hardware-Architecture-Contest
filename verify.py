@@ -52,7 +52,7 @@ def compare_yolo_hex(golden_path, hw_out_dir, num_channels=4, width=64, height=6
 
 # --- 설정부 (사용자 환경에 맞게 수정) ---
 # 정답지가 들어있는 폴더와 하드웨어 출력이 나오는 폴더를 지정하세요.
-GOLDEN_FILE = "C:/Users/15Z980/Desktop/yun/DeepLearning-Hardware-Architecture-Contest/hex/CONV04_output.hex"
-HW_OUT_DIR  = "C:/Users/15Z980/Desktop/yun/DeepLearning-Hardware-Architecture-Contest"
+GOLDEN_FILE = "/Volumes/Yun_ssd/AIX2026/AIX/hex/CONV04_output.hex"
+HW_OUT_DIR  = "/Volumes/Yun_ssd/AIX2026/AIX"
 
 compare_yolo_hex(GOLDEN_FILE, HW_OUT_DIR)

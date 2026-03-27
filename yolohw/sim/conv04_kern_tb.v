@@ -114,16 +114,20 @@ initial begin: PROC_Main
                     din[127:72] = 56'd0;
 
                     for(j=0; j<TO; j=j+1) begin
-                        // 임시 변수 tmp_win_val에 먼저 값을 채운 뒤 배열 win[j]에 대입
-                        tmp_win_val[ 7: 0] = filter[(j*Fx*Fy*Ni)+ni_ch*9+0][7:0];
-                        tmp_win_val[15: 8] = filter[(j*Fx*Fy*Ni)+ni_ch*9+1][7:0];
-                        tmp_win_val[23:16] = filter[(j*Fx*Fy*Ni)+ni_ch*9+2][7:0];
-                        tmp_win_val[31:24] = filter[(j*Fx*Fy*Ni)+ni_ch*9+3][7:0];
-                        tmp_win_val[39:32] = filter[(j*Fx*Fy*Ni)+ni_ch*9+4][7:0];
-                        tmp_win_val[47:40] = filter[(j*Fx*Fy*Ni)+ni_ch*9+5][7:0];
-                        tmp_win_val[55:48] = filter[(j*Fx*Fy*Ni)+ni_ch*9+6][7:0];
-                        tmp_win_val[63:56] = filter[(j*Fx*Fy*Ni)+ni_ch*9+7][7:0];
-                        tmp_win_val[71:64] = filter[(j*Fx*Fy*Ni)+ni_ch*9+8][7:0];
+                        // 가중치 인덱싱 수정:
+                        // filter[]는 TI=4 packed 32비트 배열
+                        // flat_idx = j*Fx*Fy*Ni + ni_ch*9 + k
+                        // packed word : filter[flat_idx/4]
+                        // byte offset  : [8*(flat_idx%4) +: 8]
+                        tmp_win_val[ 7: 0] = filter[((j*Fx*Fy*Ni)+ni_ch*9+0)/4][8*(((j*Fx*Fy*Ni)+ni_ch*9+0)%4) +: 8];
+                        tmp_win_val[15: 8] = filter[((j*Fx*Fy*Ni)+ni_ch*9+1)/4][8*(((j*Fx*Fy*Ni)+ni_ch*9+1)%4) +: 8];
+                        tmp_win_val[23:16] = filter[((j*Fx*Fy*Ni)+ni_ch*9+2)/4][8*(((j*Fx*Fy*Ni)+ni_ch*9+2)%4) +: 8];
+                        tmp_win_val[31:24] = filter[((j*Fx*Fy*Ni)+ni_ch*9+3)/4][8*(((j*Fx*Fy*Ni)+ni_ch*9+3)%4) +: 8];
+                        tmp_win_val[39:32] = filter[((j*Fx*Fy*Ni)+ni_ch*9+4)/4][8*(((j*Fx*Fy*Ni)+ni_ch*9+4)%4) +: 8];
+                        tmp_win_val[47:40] = filter[((j*Fx*Fy*Ni)+ni_ch*9+5)/4][8*(((j*Fx*Fy*Ni)+ni_ch*9+5)%4) +: 8];
+                        tmp_win_val[55:48] = filter[((j*Fx*Fy*Ni)+ni_ch*9+6)/4][8*(((j*Fx*Fy*Ni)+ni_ch*9+6)%4) +: 8];
+                        tmp_win_val[63:56] = filter[((j*Fx*Fy*Ni)+ni_ch*9+7)/4][8*(((j*Fx*Fy*Ni)+ni_ch*9+7)%4) +: 8];
+                        tmp_win_val[71:64] = filter[((j*Fx*Fy*Ni)+ni_ch*9+8)/4][8*(((j*Fx*Fy*Ni)+ni_ch*9+8)%4) +: 8];
                         tmp_win_val[127:72] = 56'd0;
                         win[j] = tmp_win_val;
                     end
