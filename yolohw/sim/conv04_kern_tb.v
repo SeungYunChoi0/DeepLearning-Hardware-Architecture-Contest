@@ -118,11 +118,16 @@ initial begin
             end 
 
             for(j=0; j<TO; j=j+1) begin
-                if(accum_reg[j] > 0)
-                    conv_out_reg[j] = (accum_reg[j][24:9] > 255) ? 8'hFF : accum_reg[j][16:9] ;
-
-                else
-                    conv_out_reg[j] = 8'd0;
+                // CONV04: scale = in_m(32) × w_m(256) / next_m(16) = 512 → shift = >>9
+                // ReLU: 음수 → 0
+                // >>9 후 8비트 초과 시 255 클리핑
+                if(accum_reg[j] > 0) begin
+                    if(accum_reg[j][31:17] != 0)
+                        conv_out_reg[j] = 8'hFF;          // overflow → 최대값 클리핑
+                    else
+                        conv_out_reg[j] = accum_reg[j][16:9]; // >>9 정상 범위
+                end else
+                    conv_out_reg[j] = 8'd0;               // ReLU
             end
 
             @(posedge clk) out_vld_reg = 1'b1;
