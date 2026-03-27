@@ -31,7 +31,7 @@ parameter IFM_FILE     = {HEX_PATH, "/CONV04_input_16b.hex"};
 parameter WGT_FILE     = {HEX_PATH, "/CONV04_param_weight.hex"};
 
 // 4. 출력 이미지 저장 경로 (기존 경로 유지) [cite: 175-178]
-parameter OUT_PATH     = "C:/Users/15Z980/Desktop/yun/yolohw/sim/inout_data_hw";
+parameter OUT_PATH     = "C:/Users/15Z980/Desktop/yun/DeepLearning-Hardware-Architecture-Contest";
 
 parameter CONV_OUTPUT_IMG00 = {OUT_PATH, "/CONV04_output_ch00.bmp"};
 parameter CONV_OUTPUT_IMG01 = {OUT_PATH, "/CONV04_output_ch01.bmp"};

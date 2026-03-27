@@ -1,13 +1,11 @@
 `timescale 1ns / 1ns
 
 module conv_kern_tb;
-// 파일명을 사용자가 수정한 이름으로 변경했습니다. 
-// 만약 src 폴더 안에 있다면 "../src/define_CONV04.v"로 경로를 맞춰주세요.
+// define 파일 경로가 src 폴더 내에 있다면 "../src/define_CONV04.v"로 수정이 필요할 수 있습니다.
 `include "define_CONV04.v" 
 
-// Clock
 parameter CLK_PERIOD = 10; 
-parameter TO          = 12; // 64개 출력 채널 중 12개 병렬 처리
+parameter TO          = 12; 
 parameter MAC_LATENCY = 9;
 
 reg clk;
@@ -19,7 +17,7 @@ initial begin
 end
 
 //--------------------------------------------------------------------
-// 메모리 선언
+// 신호 및 메모리 선언
 //--------------------------------------------------------------------
 reg [7:0]              in_img_all [0:IFM_HEIGHT*IFM_WIDTH*Ni-1];
 reg [IFM_WORD_SIZE_32-1:0] in_img [0:IFM_DATA_SIZE_32-1];
@@ -35,7 +33,11 @@ reg [127:0] din;
 wire [19:0] acc_o [0:TO-1];
 wire        vld_o [0:TO-1];
 
+// 비트 추출을 위한 임시 변수 추가
+reg [31:0] temp_psum;
+
 integer i, j, ni_ch;
+integer row, col;
 
 //--------------------------------------------------------------------
 // 데이터 로드
@@ -54,14 +56,10 @@ initial begin: PROC_Load
 end
 
 //--------------------------------------------------------------------
-// 메인 시뮬레이션 로직
+// 메인 시뮬레이션 루프
 //--------------------------------------------------------------------
-integer row, col;
-reg preload;
-
 initial begin
     rstn        = 1'b0;
-    preload     = 1'b0;
     vld_i       = 1'b0;
     out_vld_reg = 1'b0;
     din         = 128'd0;
@@ -86,7 +84,7 @@ initial begin
             for(ni_ch=0; ni_ch<Ni; ni_ch=ni_ch+1) begin
                 @(posedge clk) begin
                     vld_i = 1'b1;
-                    // Input packing (3x3 window with zero padding)
+                    // Input Packing
                     din[ 7: 0] = ((row==0)||(col==0))              ? 8'd0 : in_img_all[ni_ch*IFM_HEIGHT*IFM_WIDTH+(row-1)*IFM_WIDTH+(col-1)];
                     din[15: 8] =  (row==0)                          ? 8'd0 : in_img_all[ni_ch*IFM_HEIGHT*IFM_WIDTH+(row-1)*IFM_WIDTH+ col   ];
                     din[23:16] = ((row==0)||(col==IFM_WIDTH-1))     ? 8'd0 : in_img_all[ni_ch*IFM_HEIGHT*IFM_WIDTH+(row-1)*IFM_WIDTH+(col+1)];
@@ -117,17 +115,16 @@ initial begin
                     accum_reg[j] = accum_reg[j] + $signed(acc_o[j]);
             end 
 
+            // 역양자화 및 ReLU (임시 변수 사용으로 Syntax Error 해결)
             for(j=0; j<TO; j=j+1) begin
-                // CONV04: scale = in_m(32) × w_m(256) / next_m(16) = 512 → shift = >>9
-                // ReLU: 음수 → 0
-                // >>9 후 8비트 초과 시 255 클리핑
-                if(accum_reg[j] > 0) begin
-                    if(accum_reg[j][31:17] != 0)
-                        conv_out_reg[j] = 8'hFF;          // overflow → 최대값 클리핑
+                temp_psum = accum_reg[j];
+                if($signed(temp_psum) > 0) begin
+                    if(temp_psum[31:17] != 0) 
+                        conv_out_reg[j] = 8'hFF;
                     else
-                        conv_out_reg[j] = accum_reg[j][16:9]; // >>9 정상 범위
+                        conv_out_reg[j] = temp_psum[16:9]; // >> 9
                 end else
-                    conv_out_reg[j] = 8'd0;               // ReLU
+                    conv_out_reg[j] = 8'd0;
             end
 
             @(posedge clk) out_vld_reg = 1'b1;
@@ -140,7 +137,7 @@ initial begin
 end
 
 //--------------------------------------------------------------------
-// 모듈 인스턴스
+// 인스턴스
 //--------------------------------------------------------------------
 generate
     genvar m;
@@ -153,7 +150,7 @@ generate
     genvar b;
     for(b=0; b<4; b=b+1) begin: BMP_OUT_GEN
         bmp_image_writer #(.OUTFILE( (b==0)?CONV_OUTPUT_IMG00:(b==1)?CONV_OUTPUT_IMG01:(b==2)?CONV_OUTPUT_IMG02:CONV_OUTPUT_IMG03 ),
-                          .WIDTH(IFM_WIDTH),.HEIGHT(IFM_HEIGHT)) 
+                          .WIDTH(64),.HEIGHT(64)) 
         u_out(.clk(clk),.rstn(rstn),.din(conv_out_reg[b]),.vld(out_vld_reg),.frame_done());
     end
 endgenerate
